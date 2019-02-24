@@ -8,19 +8,13 @@ import (
     "log"
     "os"
     "io/ioutil"
-	mydb "programs/AUTH/mydb"
+    "crypto/sha512"
+	"encoding/base64"
+	mydb "programs/AUTH-1/mydb"
     _ "github.com/lib/pq"
-    helper "programs/AUTH/helpers"
+    helper "programs/AUTH-1/helpers"
     "github.com/dgrijalva/jwt-go"
-	/*"github.com/gorilla/context"
-	"github.com/gorilla/mux"*/
-	//"github.com/mitchellh/mapstructure"
 )
-
-/*type LoginDetails struct {
-	Email string `json:"username"`
-	Password string `json:"password"`
-}*/
 
 type JwtToken struct {
 	Token string `json:"token"`
@@ -33,7 +27,7 @@ type Exception struct {
 func main() {
     
     uName, email, pwd, pwdConfirm := "", "", "", ""
- 
+    id,subject,StartDateTime,EndDateTime := "", "", "", ""
     mux := http.NewServeMux()
     db := connectToDatabase()
     
@@ -60,7 +54,7 @@ func main() {
         }
  
         if pwd == pwdConfirm {
-            mydb.Signup(uName,email,pwd,pwdConfirm)
+            mydb.Signup(uName,email,pwd)
         } else {
             fmt.Fprintln(w, "Password information must be the same.")
 		}
@@ -83,10 +77,12 @@ func main() {
         }
 
 		if user, err := mydb.Login(email, pwd); err == nil {
-            
+            hasher := sha512.New()
+	        hasher.Write([]byte(pwd))
+	        pwd1 := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
             token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
                 "username": email,
-                "password": pwd,
+                "password": pwd1,
             })
             tokenString, error := token.SignedString([]byte("secret"))
             if error != nil {
@@ -94,7 +90,7 @@ func main() {
             }
             json.NewEncoder(w).Encode(JwtToken{Token: tokenString})
 
-            var file, err = os.Create(`C:\Users\dell\go\src\programs\Auth\creds.txt`)
+            var file, err = os.Create(`path`)
             if err != nil {
                 
             }  
@@ -102,7 +98,6 @@ func main() {
             defer file.Close()
             
             log.Printf("User has logged in: %v\n", user)
-			//http.Redirect(w, r, "/home", http.StatusTemporaryRedirect)
 			return
 		} else {
 			log.Printf("Failed to log user in with email: %v %v, error was: %v\n", email,pwd, err)
@@ -130,6 +125,47 @@ func main() {
         }
     })
 
+    mux.HandleFunc("/AddEvent", func(w http.ResponseWriter, r *http.Request) {
+        b, err := ioutil.ReadFile("creds.txt")
+        if err != nil {
+            fmt.Print(err)
+        }
+        fmt.Println(string(b))
+        token, _ := jwt.Parse(string(b), func(token *jwt.Token) (interface{}, error) {
+            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+                return nil, fmt.Errorf("There was an error")
+            }
+            return []byte("secret"), nil
+        })
+        
+        if _, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+            
+            fmt.Println("Hi Authenticated")
+        } else {
+            json.NewEncoder(w).Encode(Exception{Message: "Invalid authorization token"})
+        }
+        r.ParseForm()
+ 
+        id = r.FormValue("id")     // Data from the form
+        subject = r.FormValue("subject")   // Data from the form
+        StartDateTime = r.FormValue("StartDateTime")   // Data from the form
+        EndDateTime = r.FormValue("EndDateTime") // Data from the form
+
+        idCheck := helper.IsEmpty(id)  //Check if the data is empty to prevent inserting them
+        subjectCheck := helper.IsEmpty(subject)
+        StartDateTimeCheck := helper.IsEmpty(StartDateTime)
+        EndDateTimeCheck := helper.IsEmpty(EndDateTime)
+ 
+        if idCheck || subjectCheck || StartDateTimeCheck || EndDateTimeCheck {
+            fmt.Fprintf(w, "There is empty data.")
+            return
+        }
+ 
+        status:=mydb.AddEvent(id,subject,StartDateTime,EndDateTime)
+        if status==0{
+            fmt.Fprintf(w,"Added Successfully")
+        }
+    })
     http.ListenAndServe(":8000", mux)
 }
 
