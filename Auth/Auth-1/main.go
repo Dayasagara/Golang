@@ -115,7 +115,7 @@ func main() {
         eStart = r.FormValue("eStart")
         eLocation = r.FormValue("eLocation")
 
-        var file, err1 = os.Create(`C:\Eagleview\AUTH-1\calendar.ics`)
+        var file, err1 = os.Create(`path`)
         defer file.Close()
         if err1 != nil {
             fmt.Println(err1)
